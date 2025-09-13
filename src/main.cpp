@@ -1,14 +1,13 @@
 #include <flecs.h>
 #include <SFML/Graphics/CircleShape.hpp>
-#include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/System/Angle.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/WindowEnums.hpp>
+
 #include <algorithm>
 #include <cmath>
-#include <flecs/addons/cpp/mixins/pipeline/decl.hpp>
 
 #include "core/components/CircleRenderable.h"
 #include "core/components/Physics.h"
