@@ -27,6 +27,10 @@ constexpr float RESTITUTION = 0.9f;
 struct MouseState {
   sf::Vector2i startPosition;
 };
+
+struct LifeTime {
+  float seconds = 1.f;
+};
 }  // namespace
 
 flecs::entity CreateParticleEntity(const flecs::world& world) {
@@ -119,6 +123,16 @@ auto DrawCircleShape(sf::RenderWindow& window) {
   };
 }
 
+auto ProcessLifeTime() {
+  return [](const flecs::entity& e, LifeTime& lt) {
+    lt.seconds -= e.world().delta_time();
+
+    if (lt.seconds <= 0.f) {
+      e.destruct();
+    }
+  };
+}
+
 void ShotParticleOnMouseReleased(const flecs::world& world, const sf::Event::MouseButtonReleased* mouseReleased) {
   // Record the position of the release
   const auto startPosition = world.get<MouseState>().startPosition;
@@ -129,7 +143,8 @@ void ShotParticleOnMouseReleased(const flecs::world& world, const sf::Event::Mou
   delta *= 10;
 
   // Generate a particle and give it that acceleration
-  auto particle = CreateParticleEntity(world);
+  const auto particle = CreateParticleEntity(world);
+  particle.set<LifeTime>({.seconds = 5.f});
   particle.get_mut<Transform>().position =
       sf::Vector2f{static_cast<float>(startPosition.x), static_cast<float>(startPosition.y)};
   particle.get_mut<Physics>().velocity = sf::Vector2f{static_cast<float>(delta.x), static_cast<float>(delta.y)};
@@ -185,6 +200,8 @@ int main() {
   world.system<CircleRenderable, const Transform>("CircleRenderingSystem")
       .kind(flecs::OnStore)
       .each(DrawCircleShape(window));
+
+  world.system<LifeTime>("LifeTimeSystem").each(ProcessLifeTime());
 
   // --- Run the game loop ---
   sf::Clock clock;
