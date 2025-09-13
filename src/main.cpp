@@ -6,8 +6,12 @@
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/WindowEnums.hpp>
+#include <algorithm>
+#include <cmath>
+#include <flecs/addons/cpp/mixins/pipeline/decl.hpp>
 
 #include "core/components/CircleRenderable.h"
+#include "core/components/Physics.h"
 #include "core/components/Transform.h"
 
 int main() {
@@ -22,16 +26,55 @@ int main() {
   const flecs::world world;
 
   // circle with 100-pixel radius, green fill
-  auto triangle = world.entity().set<CircleRenderable>({}).set<Transform>({{1920 / 2.f, 1080 / 2.f}});
-  auto& shape = triangle.get_mut<CircleRenderable>().shape;
+  auto particle = world.entity()
+                      .set<CircleRenderable>({})
+                      .set<Transform>({{1920 / 2.f, 1080 / 2.f}})
+                      .set<Physics>({.damping = 0.98f});
+  auto& shape = particle.get_mut<CircleRenderable>().shape;
+  shape.setRadius(20.f);
+  shape.setPointCount(64);
   shape.setFillColor(sf::Color::Green);
-  shape.setOrigin({100.f, 100.f});
+  shape.setOrigin({20.f, 20.f});
 
-  // add our systems to the world, rotator and renderer
-  world.system<Transform>().each(
-      [](const flecs::iter& it, size_t, Transform& t) { t.rotation += 180.f * it.delta_time(); });
+  // add our systems to the world
+  world.system<Transform, Physics>("PhysicsIntegratorSystem")
+      .each([](const flecs::iter& it, size_t, Transform& t, Physics& p) {
+        if (p.inverseMass <= 0.f)
+          return;
 
-  world.system<CircleRenderable, const Transform>()
+        const float dt = it.delta_time();
+        assert(dt > 0.f);
+
+        // integrate the gravity
+        p.acceleration += p.gravity;
+
+        // integrate to the velocity considering the damping
+        p.velocity *= std::pow(p.damping, dt);
+        p.velocity += p.acceleration * dt;
+
+        // integrate to the position
+        t.position += p.velocity * dt;
+
+        // clear the acceleration
+        p.acceleration = {0.f, 0.f};
+      });
+
+  world.system<const CircleRenderable, Transform, Physics>("ScreenBounceSystem")
+      .kind(flecs::PostUpdate)
+      .each([&window](const CircleRenderable& c, Transform& t, Physics& p) {
+        const auto windowSize = window.getSize();
+        const auto radius = c.shape.getRadius();
+
+        if (t.position.x - radius < 0 || t.position.x + radius > windowSize.x) {
+          p.velocity.x *= -1;
+          t.position.x = std::clamp(t.position.x, radius, windowSize.x - radius);
+        } else if (t.position.y - radius < 0 || t.position.y + radius > windowSize.y) {
+          p.velocity.y *= -1;
+          t.position.y = std::clamp(t.position.y, radius, windowSize.y - radius);
+        }
+      });
+
+  world.system<CircleRenderable, const Transform>("RenderingSystem")
       .kind(flecs::OnStore)
       .each([&window](CircleRenderable c, const Transform t) {
         c.shape.setRotation(sf::degrees(t.rotation));
