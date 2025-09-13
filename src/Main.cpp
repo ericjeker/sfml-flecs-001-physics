@@ -31,6 +31,12 @@ struct MouseState {
 struct LifeTime {
   float seconds = 1.f;
 };
+
+struct LifeTimeOneFrame {};
+
+struct Force {
+  sf::Vector2f vector;
+};
 }  // namespace
 
 flecs::entity CreateParticleEntity(const flecs::world& world) {
@@ -58,6 +64,14 @@ flecs::entity CreateScreenBorder(const flecs::world& world) {
   vertices.push_back({.position = {SCREEN_PADDING, SCREEN_PADDING}, .color = NordTheme::PolarNight1});
 
   return border;
+}
+
+auto ApplyForces() {
+  return [](const flecs::iter& it, size_t, Physics& p, const Force& f) {
+    // Apply the force to the entity's acceleration
+    // F = ma, so a = F/m. If inverseMass = 1/m, then a = F * inverseMass.
+    p.acceleration += f.vector * p.inverseMass;
+  };
 }
 
 auto IntegratePhysics() {
@@ -133,6 +147,12 @@ auto ProcessLifeTime() {
   };
 }
 
+auto ProcessLifeTimeOneFrame() {
+  return [](const flecs::entity& e, const LifeTimeOneFrame&) {
+    e.destruct();
+  };
+}
+
 void ShotParticleOnMouseReleased(const flecs::world& world, const sf::Event::MouseButtonReleased* mouseReleased) {
   // Record the position of the release
   const auto startPosition = world.get<MouseState>().startPosition;
@@ -189,19 +209,22 @@ int main() {
   CreateParticleEntity(world);
 
   // --- Add Systems ---
+  world.system<Physics, Force>("ForceSystem").each(ApplyForces());
   world.system<Transform, Physics>("PhysicsIntegratorSystem").each(IntegratePhysics());
 
   world.system<const CircleRenderable, Transform, Physics>("ScreenBounceSystem")
       .kind(flecs::PostUpdate)
       .each(HandleBoundaryCollision());
 
+  // --- Rendering Systems ---
   world.system<const VerticesRenderable>("VerticesRenderingSystem").kind(flecs::OnStore).each(DrawVertices(window));
-
   world.system<CircleRenderable, const Transform>("CircleRenderingSystem")
       .kind(flecs::OnStore)
       .each(DrawCircleShape(window));
 
+  // --- Lifetime Systems ---
   world.system<LifeTime>("LifeTimeSystem").each(ProcessLifeTime());
+  world.system<const LifeTimeOneFrame>("LifeTimeOneFrameSystem").each(ProcessLifeTimeOneFrame());
 
   // --- Run the game loop ---
   sf::Clock clock;
