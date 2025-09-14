@@ -1,0 +1,10 @@
+file(GLOB_RECURSE SOURCES Private/*.cpp)
+add_library(PhysicsModule)
+target_sources(PhysicsModule PRIVATE ${SOURCES})
+target_include_directories(PhysicsModule PUBLIC Public)
+target_link_libraries(PhysicsModule PRIVATE Core flecs SFML::Graphics)
+
+if (ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(Tests)
+endif ()

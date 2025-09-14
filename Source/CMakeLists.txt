@@ -1,0 +1,3 @@
+add_subdirectory(Core)
+add_subdirectory(PhysicsModule)
+add_subdirectory(GamePhysicsEngine)

@@ -1,6 +1,6 @@
 // Copyright (c) Eric Jeker 2025.
 
-#include "core/utils/Logger.h"
+#include "Core/Utilities/Logger.h"
 
 #include <iostream>
 #include <ostream>

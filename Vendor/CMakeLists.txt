@@ -1,6 +1,6 @@
 add_library(vendor INTERFACE)
 
-message("--- Fetching Content")
+message("--- Fetching SFML")
 include(FetchContent)
 FetchContent_Declare(SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
@@ -10,6 +10,7 @@ FetchContent_Declare(SFML
     SYSTEM)
 FetchContent_MakeAvailable(SFML)
 
+message("--- Fetching Flecs")
 FetchContent_Declare(Flecs
     GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
     GIT_TAG v4.1.1

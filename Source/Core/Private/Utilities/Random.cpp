@@ -1,6 +1,6 @@
 // Copyright (c) Eric Jeker 2025.
 
-#include "core/utils/Random.h"
+#include "Core/Utilities/Random.h"
 
 #include <random>
 

@@ -9,12 +9,16 @@
 #include <algorithm>
 #include <cmath>
 
-#include "core/components/CircleRenderable.h"
-#include "core/components/Physics.h"
-#include "core/components/ScreenBoundaries.h"
-#include "core/components/Transform.h"
-#include "core/components/VerticesRenderable.h"
-#include "core/themes/Nord.h"
+#include "Core/Components/CircleRenderable.h"
+#include "Core/Components/ScreenBoundaries.h"
+#include "Core/Components/Transform.h"
+#include "Core/Components/VerticesRenderable.h"
+#include "Core/Themes/Nord.h"
+#include "PhysicsModule/Components/Damping.h"
+#include "PhysicsModule/Components/Drag.h"
+#include "PhysicsModule/Components/Gravity.h"
+#include "PhysicsModule/Components/RigidBody.h"
+#include "PhysicsModule/PhysicsModule.h"
 
 namespace {
 constexpr float SCREEN_PADDING = 5.f;
@@ -43,7 +47,11 @@ flecs::entity CreateParticleEntity(const flecs::world& world) {
   const auto particle = world.entity()
                             .set<CircleRenderable>({})
                             .set<Transform>({{SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f}})
-                            .set<Physics>({.damping = 0.98f, .gravity = GRAVITY});
+                            .set<RigidBody>({})
+                            //.set<Drag>({})
+                            .set<Damping>({})
+                            .set<Gravity>({});
+
   auto& shape = particle.get_mut<CircleRenderable>().shape;
   shape.setRadius(PARTICLE_RADIUS);
   shape.setPointCount(16);
@@ -66,39 +74,8 @@ flecs::entity CreateScreenBorder(const flecs::world& world) {
   return border;
 }
 
-auto ApplyForces() {
-  return [](const flecs::iter& it, size_t, Physics& p, const Force& f) {
-    // Apply the force to the entity's acceleration
-    // F = ma, so a = F/m. If inverseMass = 1/m, then a = F * inverseMass.
-    p.acceleration += f.vector * p.inverseMass;
-  };
-}
-
-auto IntegratePhysics() {
-  return [](const flecs::iter& it, size_t, Transform& t, Physics& p) {
-    if (p.inverseMass <= 0.f)
-      return;
-
-    const float dt = it.delta_time();
-    assert(dt > 0.f);
-
-    // integrate the gravity
-    p.acceleration += p.gravity;
-
-    // integrate to the velocity considering the damping
-    p.velocity *= std::pow(p.damping, dt);
-    p.velocity += p.acceleration * dt;
-
-    // integrate to the position
-    t.position += p.velocity * dt;
-
-    // clear the acceleration
-    p.acceleration = {0.f, 0.f};
-  };
-}
-
 auto HandleBoundaryCollision() {
-  return [](const flecs::iter& it, size_t, const CircleRenderable& c, Transform& t, Physics& p) {
+  return [](const flecs::iter& it, size_t, const CircleRenderable& c, Transform& t, RigidBody& p) {
     const auto screenBounds = it.world().get<ScreenBoundaries>().bounds;
     const auto radius = c.shape.getRadius();
     bool collided = false;
@@ -160,14 +137,13 @@ void ShotParticleOnMouseReleased(const flecs::world& world, const sf::Event::Mou
 
   // Calculate the vector between the two clicks
   auto delta = releasePosition - startPosition;
-  delta *= 10;
+  delta *= 20;
 
   // Generate a particle and give it that acceleration
   const auto particle = CreateParticleEntity(world);
-  particle.set<LifeTime>({.seconds = 5.f});
   particle.get_mut<Transform>().position =
       sf::Vector2f{static_cast<float>(startPosition.x), static_cast<float>(startPosition.y)};
-  particle.get_mut<Physics>().velocity = sf::Vector2f{static_cast<float>(delta.x), static_cast<float>(delta.y)};
+  particle.get_mut<RigidBody>().velocity = sf::Vector2f{static_cast<float>(delta.x), static_cast<float>(delta.y)};
 
   // Clean-up
   world.remove<MouseState>();
@@ -200,6 +176,9 @@ int main() {
   // the unique flecs world
   const flecs::world world;
 
+  // --- Add Modules ---
+  PhysicsModule::Register(world);
+
   // --- Define Singletons ---
   world.set<ScreenBoundaries>({sf::FloatRect{{SCREEN_PADDING, SCREEN_PADDING},
                                              {SCREEN_WIDTH - 2 * SCREEN_PADDING, SCREEN_HEIGHT - 2 * SCREEN_PADDING}}});
@@ -209,10 +188,8 @@ int main() {
   CreateParticleEntity(world);
 
   // --- Add Systems ---
-  world.system<Physics, Force>("ForceSystem").each(ApplyForces());
-  world.system<Transform, Physics>("PhysicsIntegratorSystem").each(IntegratePhysics());
 
-  world.system<const CircleRenderable, Transform, Physics>("ScreenBounceSystem")
+  world.system<const CircleRenderable, Transform, RigidBody>("ScreenBounceSystem")
       .kind(flecs::PostUpdate)
       .each(HandleBoundaryCollision());
 
@@ -239,7 +216,7 @@ int main() {
           window.close();
         } else if (keyPressed->code == sf::Keyboard::Key::R) {
           // Restart the simulation
-          world.query<Transform, Physics>().each([](Transform& t, Physics& p) {
+          world.query<Transform, RigidBody>().each([](Transform& t, RigidBody& p) {
             t.position = {SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f};
             p.velocity = {0.f, 0.f};
           });
